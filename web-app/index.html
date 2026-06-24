@@ -1,9 +1,98 @@
-<!-- In HTML Comments are written like this -->
-<!-- They can all be removed for your apps -->
-<!doctype html> <!-- This first line tells browsers to expect modern standard html 5 -->
-<html lang="en-gb"> <!-- This is indicates the page is written in British English, useful for accessibility -->
-<meta charset="utf-8"> <!-- This indicates how the file is encoded. utf-8 is standard -->
-<title>Your Web-app Title</title> <!-- All pages need a title, this will be displayed in the browser's title bar -->
-<link rel="stylesheet" href="default.css"> <!-- Import style sheet – default.css -->
-<link rel="icon" href="./assets/favicon.png"> <!-- Import 'Favorites Icon' – favicon.png -->
-<script type="module" src="main.js"></script> <!-- Load the main script. Must be type="module". Have only one of these -->
+<!doctype html>
+<html lang="en-gb">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Random Graphwrapper Game UI</title>
+    <link rel="stylesheet" href="default.css">
+    <script type="module" src="random-main.js"></script>
+    <script src="battery-widget.js"></script>
+</head>
+<body>
+<div id="app" data-state="menu">
+    <section id="menuOverlay" class="menu-overlay" aria-live="polite">
+        <div class="menu-card">
+            <p id="menuEyebrow" class="eyebrow">Start menu</p>
+            <h1 id="menuTitle">Node Route Shuffle</h1>
+            <p id="menuDescription" class="lede">This page generates a random truth table, converts it into a graphwrapper, and hands that graph to the game UI immediately.</p>
+            <p id="menuTime" class="menu-time" hidden></p>
+            <p id="menuNote" class="menu-note">Use the View button inside each node to inspect its truth table.</p>
+            <button id="menuPlayButton" class="primary-button" type="button">Play</button>
+        </div>
+    </section>
+
+    <section id="completeScreen" class="menu-overlay complete-overlay" aria-live="polite" aria-hidden="true" hidden>
+        <div class="menu-card">
+            <p class="eyebrow">Completed</p>
+            <h1>Board solved</h1>
+            <p class="lede">You finished in <strong id="finalTime">0:00</strong>.</p>
+            <button id="playAgainButton" class="primary-button" type="button">Play again</button>
+        </div>
+    </section>
+
+    <main id="gameLayout" class="layout game-layout">
+        <section class="panel board-panel">
+            <div class="panel-heading">
+                <div>
+                    <p class="section-label">Board</p>
+                    <h2>Graph layout</h2>
+                </div>
+                <p id="progressText" class="canvas-summary">0 / 0 placed</p>
+            </div>
+
+            <div class="board-toolbar">
+                <div class="status-stack">
+                    <span id="statusBadge" class="badge" data-tone="neutral">Loading</span>
+                    <span id="hintText" class="board-hint">Generating the graphwrapper and board.</span>
+                </div>
+                <div class="board-actions">
+                    <span id="timerText" class="timer-pill">00:00</span>
+                    <button id="shuffleButton" class="secondary-button" type="button">Shuffle</button>
+                    <button id="resetButton" class="secondary-button" type="button">Reset</button>
+                    <button id="checkButton" class="primary-button" type="button">Check layout</button>
+                </div>
+            </div>
+
+            <div id="boardViewport" class="board-viewport" aria-label="Graph board">
+                <svg id="edgeLayer" class="edge-layer" aria-hidden="true"></svg>
+                <div id="slotLayer" class="slot-layer" aria-hidden="true"></div>
+                <div id="tokenLayer" class="token-layer token-layer--board" aria-hidden="true"></div>
+            </div>
+
+            <div class="strip-shell">
+                <div class="panel-heading compact-heading">
+                    <div>
+                        <p class="section-label">Strip</p>
+                        <h2>Available nodes</h2>
+                    </div>
+                    <p class="canvas-summary">Drag nodes into the slots</p>
+                </div>
+                <div id="stripLayer" class="strip-layer" aria-label="Available node cards"></div>
+            </div>
+        </section>
+
+        <aside id="truthPanel" class="panel truth-panel">
+            <div class="truth-panel-heading">
+                <div>
+                    <p class="section-label">Truth table</p>
+                    <h2 id="truthPanelTitle">Select a node</h2>
+                </div>
+                <button id="truthPanelClose" class="secondary-button" type="button">Clear</button>
+            </div>
+            <p id="truthPanelMeta" class="truth-panel-meta">Use the View button inside a node to inspect its truth table here.</p>
+            <div class="truth-panel-body">
+                <div id="truthPanelBody"></div>
+                <p id="truthPanelEmpty" class="truth-panel-empty">No node selected.</p>
+            </div>
+            <div class="truth-progress-panel">
+                <div class="truth-progress-div">
+                    <p class="truth-progress-label">Progress</p>
+                    <div id="batteryWidget"></div>
+                </div>
+                <p id="truthProgressText" class="truth-progress-text">0 / 0 placed</p>
+            </div>
+        </aside>
+    </main>
+</div>
+</body>
+</html>

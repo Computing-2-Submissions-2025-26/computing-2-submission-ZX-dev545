@@ -5,6 +5,21 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Debug Web App (Edge)",
+            "type": "pwa-msedge",
+            "request": "launch",
+            "url": "file://${workspaceFolder}/web-app/index.html",
+            "webRoot": "${workspaceFolder}",
+            "runtimeArgs": [
+                "--allow-file-access-from-files"
+            ],
+            "sourceMaps": true,
+            "skipFiles": [
+                "${workspaceFolder}/node_modules/**",
+                "<node_internals>/**"
+            ]
+        },
+        {
             "name": "Run Web App – Firefox",
             "type": "firefox",
             "request": "launch",
