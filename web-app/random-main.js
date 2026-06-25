@@ -11,7 +11,7 @@ function buildRandomGraphWrapper() {
   const inputCount = pickRandomInputCount();
   const truthTable = buildRandomTruthTable(inputCount, {
     outputStates: [0, 1],
-    shuffleRows: true,
+    shuffleRows: true
   });
   const graphWrapper = buildGraphFromTruthTable(truthTable, "RANDOM");
 
@@ -45,12 +45,12 @@ function startNewRandomGame() {
   return graphWrapper;
 }
 
-void bootstrapRandomGame();
+// bootstrapRandomGame();
 
 window.randomGame = {
   buildRandomGraphWrapper: buildRandomGraphWrapper,
   bootstrapRandomGame: bootstrapRandomGame,
-  startNewRandomGame: startNewRandomGame,
+  startNewRandomGame: startNewRandomGame
 };
 
 export { buildRandomGraphWrapper, bootstrapRandomGame, startNewRandomGame };

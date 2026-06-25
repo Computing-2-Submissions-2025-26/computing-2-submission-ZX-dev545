@@ -6,7 +6,7 @@
     "configurations": [
         {
             "name": "Debug Web App (Edge)",
-            "type": "pwa-msedge",
+            "type": "msedge",
             "request": "launch",
             "url": "file://${workspaceFolder}/web-app/index.html",
             "webRoot": "${workspaceFolder}",

@@ -8,7 +8,7 @@ const CHIP_PALETTE = [
   "#cab8ff",
   "#a2f0e9",
   "#f8d3a7",
-  "#d4ddff",
+  "#d4ddff"
 ];
 
 const state = {
@@ -1081,7 +1081,7 @@ function updateSummary() {
   if (filled === total && correct === total) {
     setStatus("Solved", "success");
     if (state.gameState === "playing") {
-      //scheduleFinishGame();
+      scheduleFinishGame();
     }
   } else if (filled === total) {
     setStatus("Ready to check", "warning");
