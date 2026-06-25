@@ -1,5 +1,5 @@
 
-import { chain, fromPairs, reduce, sort, uniq, zipWith } from "ramda";
+import R from "./ramda.js";
 
 const S = "\u130C0";
 const A = "\u13080";
@@ -48,7 +48,7 @@ function getMatchingKeys(map, patternArray) {
 }
 
 function mapToObject(m) {
-    return fromPairs(
+    return R.fromPairs(
         [...m.entries()].map(([key, value]) => [JSON.stringify(key), value])
     );
 }
@@ -90,7 +90,7 @@ function parseStrings(strings, mode) {
 
 function buildStringTruthTable(strings, mode) {
     const sequences = parseStrings(strings, mode);
-    const maxLength = reduce(
+    const maxLength = R.reduce(
         (acc, seq) => Math.max(acc, seq.length), 0, sequences
     );
     const inputCount = Math.max(0, maxLength - 1);
@@ -617,20 +617,24 @@ class Graph {
     }
 
     getTruthTableColumns() {
-        const inputColumns = this.neurones
-            .filter(n => n.nodeType === "input")
-            .map(n => n.name)
-            .sort();
+        const inputColumns = R.sort(
+            (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+            this.neurones
+                .filter(n => n.nodeType === "input")
+                .map(n => n.name)
+        );
         this._calculatePropagationOrder();
         const intermediateColumns = this.propagationOrder.map(n => n.name);
         return [...inputColumns, ...intermediateColumns];
     }
 
     getTruthTableRows() {
-        const inputColumns = this.neurones
-            .filter(n => n.nodeType === "input")
-            .map(n => n.name)
-            .sort();
+        const inputColumns = R.sort(
+            (a, b) => (a < b ? -1 : a > b ? 1 : 0),
+            this.neurones
+                .filter(n => n.nodeType === "input")
+                .map(n => n.name)
+        );
         
         if (inputColumns.length === 0) return [];
         
@@ -658,15 +662,13 @@ class Graph {
     }
 
     cartesianProduct(arrays) {
-        if (arrays.length === 0) return [[]];
-        const result = [];
-        const rest = this.cartesianProduct(arrays.slice(1));
-        for (const item of arrays[0]) {
-            for (const r of rest) {
-                result.push([item, ...r]);
-            }
-        }
-        return result;
+        return R.reduce(
+            (acc, arr) => R.chain(
+                combo => arr.map(item => [...combo, item]), acc
+            ),
+            [[]],
+            arrays
+        );
     }
 
     getTruthTableEntries() {
@@ -682,9 +684,7 @@ class Graph {
     }
 
     static obediance(column, targetColumn) {
-        const predicate = column.map(function (value, index) {
-            return value === targetColumn[index];
-        });
+        const predicate = R.zipWith((a, b) => a === b, column, targetColumn);
         const score = predicate.length > 0
             ? predicate.filter(Boolean).length / predicate.length
             : 0;
@@ -708,24 +708,11 @@ class Graph {
         };
 
         const flattenStates = function (values) {
-            const seen = new Set();
-            const states = [];
-
-            for (const value of values) {
-                if (Array.isArray(value)) {
-                    for (const item of value) {
-                        if (!seen.has(item)) {
-                            seen.add(item);
-                            states.push(item);
-                        }
-                    }
-                } else if (!seen.has(value)) {
-                    seen.add(value);
-                    states.push(value);
-                }
-            }
-
-            return states.length > 0 ? states : [N];
+            const items = R.chain(
+                v => (Array.isArray(v) ? v : [v]), [...values]
+            );
+            const flat = R.uniq(items);
+            return flat.length > 0 ? flat : [N];
         };
 
         const currentLayers = Array.isArray(neuroneLayers) ? neuroneLayers.slice() : [];
