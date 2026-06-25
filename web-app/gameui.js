@@ -1074,7 +1074,7 @@ function updateSummary() {
   if (filled === total && correct === total) {
     setStatus("Solved", "success");
     if (state.gameState === "playing") {
-      //scheduleFinishGame();
+      scheduleFinishGame();
     }
   } else if (filled === total) {
     setStatus("Ready to check", "warning");
