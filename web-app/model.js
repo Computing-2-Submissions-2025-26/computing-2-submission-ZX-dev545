@@ -1,15 +1,7 @@
 
-<<<<<<< HEAD
-import R from "./ramda.js";
-
-const S = "\u130C0";
-const A = "\u13080";
-const N = "\u13153";
-=======
 const S = '\u130C0';
 const A = '\u13080';
 const N = '\u13153';
->>>>>>> parent of 1dab3e8 (lint)
 
 function arraysEqual(a, b) {
     if (a === b) return true;
@@ -53,19 +45,12 @@ function getMatchingKeys(map, patternArray) {
     return results;
 }
 
-<<<<<<< HEAD
-function mapToObject(m) {
-    return fromPairs(
-        [...m.entries()].map(([key, value]) => [JSON.stringify(key), value])
-    );
-=======
 function mapToObject(map) {
     const obj = {};
     for (const [key, value] of map) {
         obj[JSON.stringify(key)] = value;
     }
     return obj;
->>>>>>> parent of 1dab3e8 (lint)
 }
 
 function objectToMap(obj) {
@@ -105,15 +90,9 @@ function parseStrings(strings, mode) {
 
 function buildStringTruthTable(strings, mode) {
     const sequences = parseStrings(strings, mode);
-<<<<<<< HEAD
-    const maxLength = R.reduce(
-        (acc, seq) => Math.max(acc, seq.length), 0, sequences
-    );
-=======
     const maxLength = sequences.reduce(function (longest, sequence) {
         return Math.max(longest, sequence.length);
     }, 0);
->>>>>>> parent of 1dab3e8 (lint)
     const inputCount = Math.max(0, maxLength - 1);
     const columns = [];
     const rows = [];
@@ -638,14 +617,6 @@ class Graph {
     }
 
     getTruthTableColumns() {
-<<<<<<< HEAD
-        const inputColumns = R.sort(
-            (a, b) => (a < b ? -1 : a > b ? 1 : 0),
-            this.neurones
-                .filter(n => n.nodeType === "input")
-                .map(n => n.name)
-        );
-=======
         const inputColumns = this.neurones
             .filter(n => n.nodeType === 'input')
             .map(n => n.name)
@@ -657,14 +628,6 @@ class Graph {
     }
 
     getTruthTableRows() {
-<<<<<<< HEAD
-        const inputColumns = R.sort(
-            (a, b) => (a < b ? -1 : a > b ? 1 : 0),
-            this.neurones
-                .filter(n => n.nodeType === "input")
-                .map(n => n.name)
-        );
-=======
         const inputColumns = this.neurones
             .filter(n => n.nodeType === 'input')
             .map(n => n.name)
