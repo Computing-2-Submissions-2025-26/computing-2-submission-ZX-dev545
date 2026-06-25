@@ -1,5 +1,4 @@
 import model from "./model.js";
-import { clamp, groupBy, reject } from "ramda";
 
 const CHIP_PALETTE = [
   "#9fd9ff",
@@ -44,6 +43,10 @@ const dom = {};
 
 const WORLD_W = 1680;
 const WORLD_H = 1040;
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
 
 function shuffle(values) {
   const items = values.slice();
@@ -297,7 +300,9 @@ function getNodeName(node, index) {
 
 function generatePseudonyms() {
   state.cheatRevealed = false;
-  const gateNodes = reject(isFixedNode, state.nodes);
+  const gateNodes = state.nodes.filter(function (node) {
+    return !isFixedNode(node);
+  });
   const letters = gateNodes.map(function (_, i) {
     return String.fromCharCode(65 + i);
   });
@@ -390,8 +395,16 @@ function getRandomTruthTableColumnForNode(node) {
 }
 
 function buildNodeTypeBuckets(nodes) {
-  const grouped = groupBy(node => node.nodeType || node.kind || "gate", nodes);
-  return Object.assign({ input: [], gate: [], output: [] }, grouped);
+  return nodes.reduce(function (buckets, node) {
+    const type = node.nodeType || node.kind || "gate";
+
+    if (!buckets[type]) {
+      buckets[type] = [];
+    }
+
+    buckets[type].push(node);
+    return buckets;
+  }, { input: [], gate: [], output: [] });
 }
 
 function normalizeGraph(source) {
@@ -569,8 +582,8 @@ function slotBounds(slot) {
   const centerY = (slot.y / 100) * size.height;
 
   return {
-    left: clamp(8, Math.max(8, size.width - width - 8), centerX - width / 2),
-    top: clamp(8, Math.max(8, size.height - height - 8), centerY - height / 2),
+    left: clamp(centerX - width / 2, 8, Math.max(8, size.width - width - 8)),
+    top: clamp(centerY - height / 2, 8, Math.max(8, size.height - height - 8)),
     width: width,
     height: height,
     cx: centerX,
@@ -1918,7 +1931,7 @@ function fitView() {
 
 function zoomAround(px, py, factor) {
   const oldScale = state.view.scale;
-  const newScale = clamp(0.3, 2.8, oldScale * factor);
+  const newScale = clamp(oldScale * factor, 0.3, 2.8);
   state.view.x = px - (px - state.view.x) * (newScale / oldScale);
   state.view.y = py - (py - state.view.y) * (newScale / oldScale);
   state.view.scale = newScale;
@@ -2296,7 +2309,9 @@ function renderMeterRack(selectedNode) {
 // ---------- keyboard play ----------
 
 function availableNodeIds() {
-  return reject(id => state.placements.has(id), state.stripOrder);
+  return state.stripOrder.filter(function (id) {
+    return !state.placements.has(id);
+  });
 }
 
 function applyKbHighlight() {
