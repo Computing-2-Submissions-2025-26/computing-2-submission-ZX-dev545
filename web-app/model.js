@@ -1,9 +1,15 @@
 
+<<<<<<< HEAD
 import R from "./ramda.js";
 
 const S = "\u130C0";
 const A = "\u13080";
 const N = "\u13153";
+=======
+const S = '\u130C0';
+const A = '\u13080';
+const N = '\u13153';
+>>>>>>> parent of 1dab3e8 (lint)
 
 function arraysEqual(a, b) {
     if (a === b) return true;
@@ -47,10 +53,19 @@ function getMatchingKeys(map, patternArray) {
     return results;
 }
 
+<<<<<<< HEAD
 function mapToObject(m) {
     return R.fromPairs(
         [...m.entries()].map(([key, value]) => [JSON.stringify(key), value])
     );
+=======
+function mapToObject(map) {
+    const obj = {};
+    for (const [key, value] of map) {
+        obj[JSON.stringify(key)] = value;
+    }
+    return obj;
+>>>>>>> parent of 1dab3e8 (lint)
 }
 
 function objectToMap(obj) {
@@ -65,22 +80,22 @@ function objectToMap(obj) {
 const EMPTY_CELL = N;
 
 function normalizeCell(value) {
-    const text = value === null || value === undefined ? "" : String(value).trim();
+    const text = value === null || value === undefined ? '' : String(value).trim();
     return text.length > 0 ? text : EMPTY_CELL;
 }
 
 function parseStrings(strings, mode) {
     return (Array.isArray(strings) ? strings : []).map(function (source) {
-        const text = String(source || "").trim();
+        const text = String(source || '').trim();
         if (!text) {
             return [];
         }
 
-        if (mode === "words") {
+        if (mode === 'words') {
             return text.split(/\s+/).filter(Boolean);
         }
 
-        if (mode === "tokens") {
+        if (mode === 'tokens') {
             return text.split(/[\s,;|]+/).filter(Boolean);
         }
 
@@ -90,17 +105,23 @@ function parseStrings(strings, mode) {
 
 function buildStringTruthTable(strings, mode) {
     const sequences = parseStrings(strings, mode);
+<<<<<<< HEAD
     const maxLength = R.reduce(
         (acc, seq) => Math.max(acc, seq.length), 0, sequences
     );
+=======
+    const maxLength = sequences.reduce(function (longest, sequence) {
+        return Math.max(longest, sequence.length);
+    }, 0);
+>>>>>>> parent of 1dab3e8 (lint)
     const inputCount = Math.max(0, maxLength - 1);
     const columns = [];
     const rows = [];
 
     for (let i = 0; i < inputCount; i += 1) {
-        columns.push("Input " + (i + 1));
+        columns.push('Input ' + (i + 1));
     }
-    columns.push("Output");
+    columns.push('Output');
 
     for (let rowIndex = 0; rowIndex < sequences.length; rowIndex += 1) {
         const sequence = sequences[rowIndex];
@@ -114,7 +135,7 @@ function buildStringTruthTable(strings, mode) {
         const output = paddedSequence[inputCount] || EMPTY_CELL;
 
         rows.push({
-            id: "seed-" + (rowIndex + 1),
+            id: 'seed-' + (rowIndex + 1),
             cells: inputs.concat([output]),
             inputs: inputs,
             output: output,
@@ -138,10 +159,10 @@ function buildRandomTruthTable(inputCount, options = {}) {
     const columns = [];
     const rows = [];
     const inputLabels = Array.isArray(options.inputLabels) ? options.inputLabels : [];
-    const outputLabel = String(options.outputLabel || "Output");
+    const outputLabel = String(options.outputLabel || 'Output');
 
     for (let index = 0; index < inputTotal; index += 1) {
-        columns.push(String(inputLabels[index] || "Input " + (index + 1)));
+        columns.push(String(inputLabels[index] || 'Input ' + (index + 1)));
     }
     columns.push(outputLabel);
 
@@ -181,7 +202,7 @@ function buildRandomTruthTable(inputCount, options = {}) {
         const output = pickedOutput === undefined ? EMPTY_CELL : pickedOutput;
 
         rows.push({
-            id: "random-" + (rowIndex + 1),
+            id: 'random-' + (rowIndex + 1),
             cells: inputs.concat([output]),
             inputs: inputs,
             output: output,
@@ -189,7 +210,7 @@ function buildRandomTruthTable(inputCount, options = {}) {
     }
 
     return {
-        mode: "random",
+        mode: 'random',
         columns: columns,
         inputCount: inputTotal,
         rowCount: rows.length,
@@ -198,40 +219,40 @@ function buildRandomTruthTable(inputCount, options = {}) {
 }
 
 function synthesizeStringCircuit(table, options = {}) {
-    const functionName = options.functionName || "STRING";
-    const inputCount = table && typeof table.inputCount === "number" ? table.inputCount : 0;
+    const functionName = options.functionName || 'STRING';
+    const inputCount = table && typeof table.inputCount === 'number' ? table.inputCount : 0;
     const rows = table && Array.isArray(table.rows) ? table.rows : [];
     const nodes = [];
     const edges = [];
 
     for (let i = 0; i < inputCount; i += 1) {
         nodes.push({
-            id: functionName + "_IN" + (i + 1),
-            kind: "input",
-            label: "Input " + (i + 1),
+            id: functionName + '_IN' + (i + 1),
+            kind: 'input',
+            label: 'Input ' + (i + 1),
         });
     }
 
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-        const gateId = functionName + "_G" + (rowIndex + 1);
+        const gateId = functionName + '_G' + (rowIndex + 1);
         nodes.push({
             id: gateId,
-            kind: "gate",
-            label: "Row " + (rowIndex + 1),
+            kind: 'gate',
+            label: 'Row ' + (rowIndex + 1),
         });
         for (let i = 0; i < inputCount; i += 1) {
-            edges.push({ from: functionName + "_IN" + (i + 1), to: gateId });
+            edges.push({ from: functionName + '_IN' + (i + 1), to: gateId });
         }
     }
 
     nodes.push({
-        id: functionName + "_OUT",
-        kind: "output",
-        label: functionName + " Output",
+        id: functionName + '_OUT',
+        kind: 'output',
+        label: functionName + ' Output',
     });
 
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-        edges.push({ from: functionName + "_G" + (rowIndex + 1), to: functionName + "_OUT" });
+        edges.push({ from: functionName + '_G' + (rowIndex + 1), to: functionName + '_OUT' });
     }
 
     return {
@@ -249,7 +270,7 @@ function synthesizeStringCircuit(table, options = {}) {
                     x: 40 + (index * 140) % Math.max(1, width - 80),
                     y: 60 + Math.floor((index * 140) / Math.max(1, width - 80)) * 120,
                     width: 120,
-                    height: node.kind === "gate" ? 88 : 56,
+                    height: node.kind === 'gate' ? 88 : 56,
                 });
             });
 
@@ -334,7 +355,7 @@ class Neurone {
     setGateFunction(cin, func, inputStates = null, truthTable = null) {
         if (truthTable instanceof Map) {
             this.truthTable = truthTable;
-        } else if (truthTable && typeof truthTable === "object") {
+        } else if (truthTable && typeof truthTable === 'object') {
             this.truthTable = objectToMap(truthTable);
         } else {
             this.truthTable = new Map();
@@ -347,7 +368,7 @@ class Neurone {
             this.inputStates = Array(cin).fill([0, 1]);
         } else {
             this.inputStates = inputStates.slice(0, cin).map(states => {
-                if (typeof states === "number") {
+                if (typeof states === 'number') {
                     return Array.from({length: states}, (_, i) => i);
                 }
                 return [...states];
@@ -370,16 +391,16 @@ class Neurone {
 
         visited.push(this);
 
-        if (this.nodeType === "input") {
+        if (this.nodeType === 'input') {
             return this.value;
         }
 
-        if (this.nodeType === "output") {
+        if (this.nodeType === 'output') {
             this.value = this.inputs.length > 0 ? this.inputs[0].evaluate(visited) : null;
             return this.value;
         }
 
-        if (this.nodeType === "gate" && this.gateFunction) {
+        if (this.nodeType === 'gate' && this.gateFunction) {
             const inputValues = this.inputs.map(inp => inp.evaluate(visited));
             if (inputValues.some(v => v === null)) {
                 this.value = null;
@@ -419,7 +440,7 @@ class Neurone {
             }
         }
         
-        return inputsList.length > 0 ? inputsList : [{ [this.inputs[0] || ""]: N }];
+        return inputsList.length > 0 ? inputsList : [{ [this.inputs[0] || '']: N }];
     }
 
     getStructure() {
@@ -496,7 +517,7 @@ class Graph {
 
     addNeurone(neurone) {
         this.neurones.push(neurone);
-        if (neurone.nodeType === "gate") {
+        if (neurone.nodeType === 'gate') {
             if (!neurone.name) {
                 neurone.name = `x${this._nameCounter}`;
                 this._nameCounter++;
@@ -554,13 +575,13 @@ class Graph {
             }
             tempVisited.delete(neurone);
             visited.add(neurone);
-            if (neurone.nodeType !== "input") {
+            if (neurone.nodeType !== 'input') {
                 this.propagationOrder.push(neurone);
             }
         };
 
         for (const neurone of this.neurones) {
-            if (neurone.nodeType === "gate" || neurone.nodeType === "output") {
+            if (neurone.nodeType === 'gate' || neurone.nodeType === 'output') {
                 visit(neurone);
             }
         }
@@ -576,7 +597,7 @@ class Graph {
         }
         for (const [name, value] of Object.entries(valuesDict)) {
             for (const neurone of this.neurones) {
-                if (neurone.nodeType === "input" && neurone.name === name) {
+                if (neurone.nodeType === 'input' && neurone.name === name) {
                     neurone.value = value;
                     break;
                 }
@@ -595,7 +616,7 @@ class Graph {
     getCurrentValues() {
         const values = {};
         for (const neurone of this.neurones) {
-            if (neurone.nodeType === "input") {
+            if (neurone.nodeType === 'input') {
                 values[neurone.name] = neurone.value !== null ? neurone.value : N;
             }
         }
@@ -603,7 +624,7 @@ class Graph {
             values[neurone.name] = neurone.value !== null ? neurone.value : N;
         }
         for (const neurone of this.neurones) {
-            if (neurone.nodeType === "output") {
+            if (neurone.nodeType === 'output') {
                 values[neurone.name] = neurone.value !== null ? neurone.value : N;
             }
         }
@@ -617,24 +638,38 @@ class Graph {
     }
 
     getTruthTableColumns() {
+<<<<<<< HEAD
         const inputColumns = R.sort(
             (a, b) => (a < b ? -1 : a > b ? 1 : 0),
             this.neurones
                 .filter(n => n.nodeType === "input")
                 .map(n => n.name)
         );
+=======
+        const inputColumns = this.neurones
+            .filter(n => n.nodeType === 'input')
+            .map(n => n.name)
+            .sort();
+>>>>>>> parent of 1dab3e8 (lint)
         this._calculatePropagationOrder();
         const intermediateColumns = this.propagationOrder.map(n => n.name);
         return [...inputColumns, ...intermediateColumns];
     }
 
     getTruthTableRows() {
+<<<<<<< HEAD
         const inputColumns = R.sort(
             (a, b) => (a < b ? -1 : a > b ? 1 : 0),
             this.neurones
                 .filter(n => n.nodeType === "input")
                 .map(n => n.name)
         );
+=======
+        const inputColumns = this.neurones
+            .filter(n => n.nodeType === 'input')
+            .map(n => n.name)
+            .sort();
+>>>>>>> parent of 1dab3e8 (lint)
         
         if (inputColumns.length === 0) return [];
         
@@ -696,7 +731,7 @@ class Graph {
             if (Array.isArray(base)) {
                 return base.slice();
             }
-            if (typeof base === "number" && Number.isFinite(base)) {
+            if (typeof base === 'number' && Number.isFinite(base)) {
                 return Array.from({ length: Math.max(0, base) }, function (_, index) {
                     return index;
                 });
@@ -717,7 +752,7 @@ class Graph {
 
         const currentLayers = Array.isArray(neuroneLayers) ? neuroneLayers.slice() : [];
         const inputNeurones = currentLayers.length > 0 ? currentLayers[0].slice() : [];
-        const functionPrefix = (functionName || "GRAPH").trim() || "GRAPH";
+        const functionPrefix = (functionName || 'GRAPH').trim() || 'GRAPH';
         const entries = truthTable instanceof Map ? [...truthTable.entries()] : [];
         const workingTruthTable = new Map(entries);
         const generatedNeurones = [];
@@ -727,7 +762,7 @@ class Graph {
         }
 
         const outputStates = baseToStates(outputBase);
-        const outputNeurone = new Neurone("output", functionPrefix + "_OUT", outputStates);
+        const outputNeurone = new Neurone('output', functionPrefix + '_OUT', outputStates);
         this.addNeurone(outputNeurone);
 
         if (inputNeurones.length === 1) {
@@ -737,7 +772,7 @@ class Graph {
                 gateTruthTable.set([inputs[0]], output);
             }
 
-            const gate = new Neurone("gate", outputNeurone.name + "_G0.0", flattenStates(gateTruthTable.values()));
+            const gate = new Neurone('gate', outputNeurone.name + '_G0.0', flattenStates(gateTruthTable.values()));
             gate.setGateFunction(
                 1,
                 Neurone.createGateFunction(gateTruthTable),
@@ -796,8 +831,8 @@ class Graph {
 
                 const gateOutputStates = flattenStates(pairTruthTable.values());
                 const gate = new Neurone(
-                    "gate",
-                    functionPrefix + "_G" + layerIndex + "." + (pairIndex / 2 + 1),
+                    'gate',
+                    functionPrefix + '_G' + layerIndex + '.' + (pairIndex / 2 + 1),
                     gateOutputStates
                 );
                 gate.setGateFunction(
@@ -894,8 +929,8 @@ function buildGraphFromTruthTable(truthTable, functionName) {
     for (i = 0; i < inputCount; i += 1) {
         const states = Array.from(inputStatesList[i]);
         const input = new Neurone(
-            "input",
-            (functionName || "GRAPH") + "_IN" + (i + 1),
+            'input',
+            (functionName || 'GRAPH') + '_IN' + (i + 1),
             states.length > 0 ? states : [0, 1]
         );
         inputNodes.push(input);
@@ -909,7 +944,7 @@ function buildGraphFromTruthTable(truthTable, functionName) {
                 return node.states;
             }),
             Array.from(outputStates),
-            functionName || "GRAPH",
+            functionName || 'GRAPH',
             [inputNodes],
             0
         );
