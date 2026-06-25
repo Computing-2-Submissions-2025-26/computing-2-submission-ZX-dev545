@@ -29,8 +29,7 @@ describe('buildRandomTruthTable', function () {
 
     const graph = buildGraphFromTruthTable(table, 'RAND');
     assert.ok(graph);
-    assert.ok(Array.isArray(graph.nodes));
-    assert.ok(Array.isArray(graph.edges));
-    assert.ok(graph.nodes.length > 0);
+    assert.ok(Array.isArray(graph.neurones));
+    assert.ok(graph.neurones.length > 0);
   });
 });
