@@ -621,7 +621,6 @@ class Graph {
             .filter(n => n.nodeType === 'input')
             .map(n => n.name)
             .sort();
->>>>>>> parent of 1dab3e8 (lint)
         this._calculatePropagationOrder();
         const intermediateColumns = this.propagationOrder.map(n => n.name);
         return [...inputColumns, ...intermediateColumns];
@@ -632,7 +631,6 @@ class Graph {
             .filter(n => n.nodeType === 'input')
             .map(n => n.name)
             .sort();
->>>>>>> parent of 1dab3e8 (lint)
         
         if (inputColumns.length === 0) return [];
         
