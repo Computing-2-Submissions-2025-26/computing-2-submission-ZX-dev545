@@ -235,6 +235,10 @@ function loadDom() {
   dom.truthTableModalTable = document.getElementById("truthPanelBody");
   dom.truthTableModalClose = document.getElementById("truthPanelClose");
   dom.truthTableModalEmpty = document.getElementById("truthPanelEmpty");
+  dom.batteryShell = document.getElementById("batteryShell");
+  dom.batteryReadout = document.getElementById("batteryReadout");
+  dom.batteryMeta = document.getElementById("batteryMeta");
+  dom.batteryTitle = document.getElementById("batteryTitle");
 }
 
 function readBackendGraph() {
@@ -1524,10 +1528,12 @@ function appendTruthTableSection(sectionTitle, sectionTable, sectionMeta) {
   const section = document.createElement("section");
   section.className = "truth-table-section";
 
-  const heading = document.createElement("h4");
-  heading.className = "truth-table-section-title";
-  heading.textContent = sectionTitle;
-  section.appendChild(heading);
+  if (sectionTitle) {
+    const heading = document.createElement("h4");
+    heading.className = "truth-table-section-title";
+    heading.textContent = sectionTitle;
+    section.appendChild(heading);
+  }
 
   if (sectionMeta) {
     const subheading = document.createElement("p");
@@ -1702,34 +1708,149 @@ function buildPlayerGraphTruthTable() {
   };
 }
 
+function buildBatteryData() {
+  const target = getRandomTruthTable();
+  const rows = target && Array.isArray(target.rows) ? target.rows : [];
+
+  function rowOutput(row) {
+    if (row.output !== undefined) {
+      return row.output;
+    }
+    const cells = Array.isArray(row.cells) ? row.cells : [];
+    return cells.length ? cells[cells.length - 1] : "";
+  }
+
+  function rowInputs(row) {
+    if (Array.isArray(row.inputs)) {
+      return row.inputs;
+    }
+    const cells = Array.isArray(row.cells) ? row.cells : [];
+    return cells.slice(0, Math.max(0, cells.length - 1));
+  }
+
+  const baseCells = rows.map(function (row) {
+    return { symbol: String(rowOutput(row)), charged: false };
+  });
+
+  if (rows.length === 0) {
+    return { connected: false, total: 0, charged: 0, cells: [] };
+  }
+
+  const disconnected = { connected: false, total: rows.length, charged: 0, cells: baseCells };
+  const graph = buildPlayerGraph();
+
+  if (!graph) {
+    return disconnected;
+  }
+
+  const inputNeurones = graph.neurones.filter(function (neurone) {
+    return neurone.nodeType === "input";
+  });
+  const outputNeurones = graph.neurones.filter(function (neurone) {
+    return neurone.nodeType === "output";
+  });
+  const outputNeurone = outputNeurones[0];
+
+  if (!outputNeurone || outputNeurone.inputs.length === 0) {
+    return disconnected;
+  }
+
+  inputNeurones.sort(function (a, b) {
+    return String(a.name).localeCompare(String(b.name), undefined, { numeric: true });
+  });
+
+  let charged = 0;
+
+  const cells = rows.map(function (row) {
+    const inputs = rowInputs(row);
+    const inputValues = {};
+
+    for (let index = 0; index < inputNeurones.length; index += 1) {
+      inputValues[inputNeurones[index].name] = model.normalizeCell(inputs[index]);
+    }
+
+    graph.setInputValues(inputValues);
+    const liveOutput = outputNeurone.value;
+    const targetOutput = String(model.normalizeCell(rowOutput(row)));
+    const isCharged = liveOutput !== null
+      && liveOutput !== undefined
+      && String(model.normalizeCell(liveOutput)) === targetOutput;
+
+    if (isCharged) {
+      charged += 1;
+    }
+
+    return { symbol: String(rowOutput(row)), charged: isCharged };
+  });
+
+  return { connected: true, total: rows.length, charged: charged, cells: cells };
+}
+
+function renderBattery() {
+  if (!dom.batteryShell) {
+    return;
+  }
+
+  const data = buildBatteryData();
+
+  if (dom.batteryReadout) {
+    dom.batteryReadout.textContent = data.charged + " / " + data.total;
+  }
+
+  if (dom.batteryMeta) {
+    if (data.total === 0) {
+      dom.batteryMeta.textContent = "Generate a circuit to begin charging.";
+    } else if (!data.connected) {
+      dom.batteryMeta.textContent = "Output is not driven by the inputs yet — place every card to energise it.";
+    } else if (data.charged === data.total) {
+      dom.batteryMeta.textContent = "Fully charged — every target row matches.";
+    } else {
+      dom.batteryMeta.textContent = "Charging — " + data.charged + " of " + data.total + " target rows match.";
+    }
+  }
+
+  dom.batteryShell.replaceChildren();
+  dom.batteryShell.classList.toggle("is-disconnected", !data.connected);
+  dom.batteryShell.classList.toggle("is-full", data.connected && data.total > 0 && data.charged === data.total);
+
+  if (data.total === 0) {
+    return;
+  }
+
+  const battery = document.createElement("div");
+  battery.className = "battery";
+
+  const cap = document.createElement("span");
+  cap.className = "battery-cap";
+  battery.appendChild(cap);
+
+  const body = document.createElement("div");
+  body.className = "battery-body";
+
+  data.cells.forEach(function (cell, index) {
+    const segment = document.createElement("div");
+    segment.className = "battery-segment" + (cell.charged ? " is-charged" : "");
+    segment.style.setProperty("--segment-index", String(index));
+
+    const symbol = document.createElement("span");
+    symbol.className = "battery-symbol";
+    symbol.textContent = cell.symbol;
+    segment.appendChild(symbol);
+
+    body.appendChild(segment);
+  });
+
+  battery.appendChild(body);
+  dom.batteryShell.appendChild(battery);
+}
+
 function hideTruthTableModal() {
   if (!dom.truthTableModal) {
     return;
   }
 
   state.selectedNodeId = null;
-
-  if (state.gameState === "playing") {
-    refreshTruthTableModal();
-    return;
-  }
-
-  if (dom.truthTableModalTitle) {
-    dom.truthTableModalTitle.textContent = "Live graph truth table";
-  }
-
-  if (dom.truthTableModalMeta) {
-    dom.truthTableModalMeta.textContent = "The live gameplay truth table appears here during play.";
-  }
-
-  if (dom.truthTableModalTable) {
-    dom.truthTableModalTable.replaceChildren();
-  }
-
-  if (dom.truthTableModalEmpty) {
-    dom.truthTableModalEmpty.hidden = false;
-    dom.truthTableModalEmpty.textContent = "The live graph truth table is shown during gameplay.";
-  }
+  refreshTruthTableModal();
 }
 
 function showTruthTableForNode(nodeId) {
@@ -1748,39 +1869,28 @@ function refreshTruthTableModal() {
     return;
   }
 
-  const playerGraphTable = buildPlayerGraphTruthTable();
   const selectedNode = state.selectedNodeId ? getNodeById(state.selectedNodeId) : null;
   const selectedTable = selectedNode ? formatTruthTableRows(selectedNode) : null;
 
-  if (dom.truthTableModalTitle) { 
-    dom.truthTableModalTitle.textContent = "Truth tables";
-  }
+  dom.truthTableModalTable.replaceChildren();
 
-  if (dom.truthTableModalMeta) {
-    dom.truthTableModalMeta.textContent = "The selected node and the live graph formed by the cards on the board.";
-  }
-
-  if (dom.truthTableModalTable) {
-    dom.truthTableModalTable.replaceChildren();
-  }
-
-  if (dom.truthTableModalEmpty) {
-    dom.truthTableModalEmpty.hidden = true;
-  }
   if (selectedNode && selectedTable) {
-    appendTruthTableSection(selectedNode.label + " truth table", selectedTable, selectedTable.meta);
-  }
-
-  if (playerGraphTable) {
-    appendTruthTableSection("Live graph truth table", playerGraphTable, playerGraphTable.meta);
+    dom.truthTableModalTitle.textContent = selectedNode.label;
+    dom.truthTableModalMeta.textContent = (selectedNode.nodeType || "node") + " node · " + selectedTable.meta;
+    if (dom.truthTableModalEmpty) {
+      dom.truthTableModalEmpty.hidden = true;
+    }
+    appendTruthTableSection("", selectedTable, "");
   } else {
-    if (dom.truthTableModalTable) {
-      const note = document.createElement("p");
-      note.className = "truth-panel-empty";
-      note.textContent = "Place all cards to generate the live graph truth table.";
-      dom.truthTableModalTable.appendChild(note);
+    dom.truthTableModalTitle.textContent = "Select a node";
+    dom.truthTableModalMeta.textContent = "Use the View button inside a node to inspect its truth table here.";
+    if (dom.truthTableModalEmpty) {
+      dom.truthTableModalEmpty.hidden = false;
+      dom.truthTableModalEmpty.textContent = "No node selected.";
     }
   }
+
+  renderBattery();
 }
 
 function checkLayout() {
@@ -1886,7 +1996,6 @@ window.gameUI = {
   setGraphSource: setGraphSource,
   getGameUIState: getGameUIState,
   showTruthTableForNode: showTruthTableForNode,
-  buildPlayerGraphTruthTable: buildPlayerGraphTruthTable,
 };
 
 if (document.readyState === "loading") {

@@ -175,7 +175,8 @@ function buildRandomTruthTable(inputCount, options = {}) {
 
     for (let rowIndex = 0; rowIndex < combinations.length; rowIndex += 1) {
         const inputs = combinations[rowIndex].slice();
-        const output = outputStates[Math.floor(Math.random() * outputStates.length)] || EMPTY_CELL;
+        const pickedOutput = outputStates[Math.floor(Math.random() * outputStates.length)];
+        const output = pickedOutput === undefined ? EMPTY_CELL : pickedOutput;
 
         rows.push({
             id: 'random-' + (rowIndex + 1),
