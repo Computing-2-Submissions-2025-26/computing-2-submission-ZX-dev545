@@ -30,9 +30,19 @@ const state = {
   completionHandle: null,
   finalTimeText: "0:00",
   pendingCompletion: false,
+  view: { x: 0, y: 0, scale: 1 },
+  pan: null,
+  hintCount: 0,
+  kb: { active: false, nodeIndex: 0, slotIndex: 0 },
+  targetInputCount: null,
+  pseudonyms: new Map(),
+  cheatRevealed: false,
 };
 
 const dom = {};
+
+const WORLD_W = 1680;
+const WORLD_H = 1040;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -147,11 +157,20 @@ function beginPlaying() {
 
   state.checking = false;
   state.selectedNodeId = null;
+  state.hintCount = 0;
+  state.kb.active = false;
+  generatePseudonyms();
+  if (dom.cheatButton) {
+    dom.cheatButton.textContent = "Cheat";
+  }
   resetPlacements(true);
   setGameState("playing");
   hideTruthTableModal();
   startTimer();
+  updateHintDisplay();
   renderBoard();
+  fitView();
+  window.requestAnimationFrame(fitView);
 }
 
 function startFreshGame() {
@@ -163,11 +182,9 @@ function startFreshGame() {
   const buildRandomTruthTable = model.buildRandomTruthTable;
   const buildGraphFromTruthTable = model.buildGraphFromTruthTable;
   
-  function pickRandomInputCount() {
-    return 2 + Math.floor(Math.random() * 3);
-  }
-  
-  const inputCount = pickRandomInputCount();
+  const inputCount = state.targetInputCount !== null
+    ? state.targetInputCount + 1
+    : 2 + Math.floor(Math.random() * 3);
   const truthTable = buildRandomTruthTable(inputCount, {
     outputStates: [0, 1],
     shuffleRows: true,
@@ -190,6 +207,7 @@ function finishGame() {
   stopTimer();
   setGameState("complete");
   updateSummary();
+  updateHintDisplay();
 }
 
 function scheduleFinishGame() {
@@ -239,6 +257,19 @@ function loadDom() {
   dom.batteryReadout = document.getElementById("batteryReadout");
   dom.batteryMeta = document.getElementById("batteryMeta");
   dom.batteryTitle = document.getElementById("batteryTitle");
+  dom.worldLayer = document.getElementById("worldLayer");
+  dom.multimeterShell = document.getElementById("multimeterShell");
+  dom.meterRack = dom.multimeterShell
+    ? dom.multimeterShell.parentElement
+    : null;
+  dom.probeWires = document.getElementById("probeWires");
+  dom.finalHints = document.getElementById("finalHints");
+  dom.zoomInBtn = document.getElementById("zoomInBtn");
+  dom.zoomOutBtn = document.getElementById("zoomOutBtn");
+  dom.zoomResetBtn = document.getElementById("zoomResetBtn");
+  dom.menuDiffInput = document.getElementById("menuDiffInput");
+  dom.completeDiffInput = document.getElementById("completeDiffInput");
+  dom.cheatButton = document.getElementById("cheatButton");
 }
 
 function readBackendGraph() {
@@ -265,6 +296,32 @@ function readBackendGraph() {
 
 function getNodeName(node, index) {
   return String(node.name || node.label || node.id || "Node " + (index + 1));
+}
+
+function generatePseudonyms() {
+  state.cheatRevealed = false;
+  const gateNodes = state.nodes.filter(function (node) {
+    return !isFixedNode(node);
+  });
+  const letters = gateNodes.map(function (_, i) {
+    return String.fromCharCode(65 + i);
+  });
+  for (let i = letters.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = letters[i];
+    letters[i] = letters[j];
+    letters[j] = tmp;
+  }
+  state.pseudonyms = new Map();
+  gateNodes.forEach(function (node, i) {
+    state.pseudonyms.set(node.id, letters[i]);
+  });
+}
+
+function getNodeLabel(node) {
+  if (state.cheatRevealed) return node.label;
+  const pseudo = state.pseudonyms.get(node.id);
+  return pseudo !== undefined ? pseudo : node.label;
 }
 
 function isGraphWrapper(graph) {
@@ -425,12 +482,12 @@ function normalizeGraph(source) {
         return;
       }
 
-      neurone.inputs.forEach(function (inputNeurone) {
+      neurone.inputs.forEach(function (inputNeurone, inputIndex) {
         if (!inputNeurone || !inputNeurone.name || !nodeById.has(inputNeurone.name)) {
           return;
         }
 
-        edges.push({ from: String(inputNeurone.name), to: String(neurone.name) });
+        edges.push({ from: String(inputNeurone.name), to: String(neurone.name), toPort: inputIndex + 1 });
       });
     });
 
@@ -511,10 +568,9 @@ function getNodeAtSlot(slotId) {
 }
 
 function boardSize() {
-  const rect = dom.boardViewport.getBoundingClientRect();
   return {
-    width: rect.width,
-    height: rect.height,
+    width: WORLD_W,
+    height: WORLD_H,
   };
 }
 
@@ -533,6 +589,15 @@ function slotBounds(slot) {
     cx: centerX,
     cy: centerY,
   };
+}
+
+function slotPortPosition(slot, port) {
+  const b = slotBounds(slot);
+  if (port === "o") {
+    return { x: b.left + b.width, y: b.top + b.height / 2 };
+  }
+  const yFrac = port === 2 ? 0.67 : 0.33;
+  return { x: b.left, y: b.top + b.height * yFrac };
 }
 
 const PERSONAL_SPACE_RADIUS = 18;
@@ -1016,7 +1081,7 @@ function updateSummary() {
   if (filled === total && correct === total) {
     setStatus("Solved", "success");
     if (state.gameState === "playing") {
-      scheduleFinishGame();
+      //scheduleFinishGame();
     }
   } else if (filled === total) {
     setStatus("Ready to check", "warning");
@@ -1091,6 +1156,29 @@ function getGraphSlotElements() {
     status.textContent = occupant ? occupant.label : "Drop a node here";
     element.appendChild(status);
 
+    const nodeForSlot = state.nodes.find(function (n) {
+      return n.id === slot.nodeId;
+    });
+    const nodeType = nodeForSlot ? nodeForSlot.nodeType : "gate";
+    if (nodeType !== "output") {
+      const portO = document.createElement("span");
+      portO.className = "slot-port slot-port--out";
+      portO.setAttribute("aria-hidden", "true");
+      element.appendChild(portO);
+    }
+    if (nodeType !== "input") {
+      const port1 = document.createElement("span");
+      port1.className = "slot-port slot-port--in1";
+      port1.setAttribute("aria-hidden", "true");
+      element.appendChild(port1);
+      if (nodeType === "gate") {
+        const port2 = document.createElement("span");
+        port2.className = "slot-port slot-port--in2";
+        port2.setAttribute("aria-hidden", "true");
+        element.appendChild(port2);
+      }
+    }
+
     return element;
   });
 }
@@ -1131,7 +1219,7 @@ function createNodeToken(node, placed, slot) {
 
   const title = document.createElement("span");
   title.className = "node-token-title";
-  title.textContent = node.label;
+  title.textContent = getNodeLabel(node);
   element.appendChild(title);
 
   const meta = document.createElement("span");
@@ -1142,10 +1230,8 @@ function createNodeToken(node, placed, slot) {
   const action = document.createElement("button");
   action.type = "button";
   action.className = "node-token-action";
-  action.textContent = "View";
-  action.setAttribute("aria-label", fixedNode
-    ? node.label + " truth table"
-    : node.label + " truth table");
+  action.textContent = "Probe";
+  action.setAttribute("aria-label", getNodeLabel(node) + " truth table");
   action.addEventListener("pointerdown", function (event) {
     event.stopPropagation();
   });
@@ -1169,21 +1255,6 @@ function drawEdges() {
   dom.edgeLayer.setAttribute("viewBox", "0 0 " + size.width + " " + size.height);
 
   const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-  const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
-  const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
-
-  marker.setAttribute("id", "arrow-head");
-  marker.setAttribute("viewBox", "0 0 10 10");
-  marker.setAttribute("refX", "8");
-  marker.setAttribute("refY", "5");
-  marker.setAttribute("markerWidth", "6");
-  marker.setAttribute("markerHeight", "6");
-  marker.setAttribute("orient", "auto-start-reverse");
-
-  arrow.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
-  arrow.setAttribute("fill", "rgba(166, 225, 255, 0.75)");
-  marker.appendChild(arrow);
-  defs.appendChild(marker);
   dom.edgeLayer.appendChild(defs);
 
   state.edges.forEach(function (edge, index) {
@@ -1198,26 +1269,28 @@ function drawEdges() {
       return;
     }
 
+    const from = slotPortPosition(fromSlot, "o");
+    const to = slotPortPosition(toSlot, edge.toPort || 1);
     const slotBoundsList = state.slots.map(function (slot) {
-      return {
-        slot: slot,
-        bounds: slotBounds(slot),
-      };
+      return { slot: slot, bounds: slotBounds(slot) };
     });
-
-    const fromBounds = slotBounds(fromSlot);
-    const toBounds = slotBounds(toSlot);
     const ignoreSlotIds = new Set([fromSlot.id, toSlot.id]);
-    const pathPoints = buildEdgePathPoints(fromBounds, toBounds, slotBoundsList, ignoreSlotIds);
-    const pathData = pointsToPathData(pathPoints);
+    const routedPoints = routeOrthogonalPath(
+      from, to, slotBoundsList, ignoreSlotIds, 0
+    ).filter(function (point, index, allPoints) {
+      if (index === 0) return true;
+      const prev = allPoints[index - 1];
+      return prev.x !== point.x || prev.y !== point.y;
+    });
+    const pathData = pointsToPathData(routedPoints);
+
     const originNode = getNodeAtSlot(fromSlot.id);
     const edgeBaseColor = originNode ? originNode.color : "#a6e1ff";
     const edgeStrokeColor = colorToRgba(edgeBaseColor, 0.34);
     const edgeArrowColor = colorToRgba(edgeBaseColor, 0.75);
-    const markerId = "arrow-head-" + index + "-" + fromSlot.id + "-" + toSlot.id;
-    const edgeMarker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
-    const edgeArrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const markerId = "arrow-" + index;
 
+    const edgeMarker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
     edgeMarker.setAttribute("id", markerId);
     edgeMarker.setAttribute("viewBox", "0 0 10 10");
     edgeMarker.setAttribute("refX", "8");
@@ -1225,7 +1298,7 @@ function drawEdges() {
     edgeMarker.setAttribute("markerWidth", "6");
     edgeMarker.setAttribute("markerHeight", "6");
     edgeMarker.setAttribute("orient", "auto-start-reverse");
-
+    const edgeArrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
     edgeArrow.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
     edgeArrow.setAttribute("fill", edgeArrowColor);
     edgeMarker.appendChild(edgeArrow);
@@ -1305,6 +1378,7 @@ function renderBoard() {
   dom.stripLayer.replaceChildren.apply(dom.stripLayer, stripTokenElements);
   updateSummary();
   refreshTruthTableModal();
+  applyKbHighlight();
 
   if (state.pendingCompletion) {
     window.requestAnimationFrame(maybeFinishGame);
@@ -1316,13 +1390,11 @@ function scheduleRender() {
 }
 
 function findSlotAtPoint(clientX, clientY) {
-  const boardRect = dom.boardViewport.getBoundingClientRect();
-  const localX = clientX - boardRect.left;
-  const localY = clientY - boardRect.top;
+  const point = clientToWorld(clientX, clientY);
 
   return state.slots.find(function (slot) {
     const bounds = slotBounds(slot);
-    return localX >= bounds.left && localX <= bounds.left + bounds.width && localY >= bounds.top && localY <= bounds.top + bounds.height;
+    return point.x >= bounds.left && point.x <= bounds.left + bounds.width && point.y >= bounds.top && point.y <= bounds.top + bounds.height;
   }) || null;
 }
 
@@ -1445,28 +1517,41 @@ function startDrag(event) {
 }
 
 function formatTruthTableRows(node) {
-  const truthTable = node.truthTable instanceof Map ? node.truthTable : node.neurone && node.neurone.truthTable instanceof Map ? node.neurone.truthTable : null;
-
-  if (!truthTable || truthTable.size === 0) {
-    return isFixedNode(node) ? getRandomTruthTableColumnForNode(node) : null;
+  if (isFixedNode(node)) {
+    return getRandomTruthTableColumnForNode(node);
   }
 
-  const rows = [];
-  const columns = [];
-  const dim = typeof node.neurone?.getDims === "function"
-    ? node.neurone.getDims()
-    : truthTable.keys().next().value.length;
+  const truthTable = node.neurone && node.neurone.truthTable instanceof Map
+    ? node.neurone.truthTable
+    : node.truthTable instanceof Map
+      ? node.truthTable
+      : null;
 
-  for (let index = 0; index < dim; index += 1) {
-    columns.push("In " + (index + 1));
+  if (!truthTable || truthTable.size === 0) {
+    return null;
+  }
+
+  function cellStr(v) {
+    return Array.isArray(v) ? v.join("/") : String(v);
+  }
+
+  let inputCount = 0;
+  const rawRows = [];
+  for (const [inputs, output] of truthTable.entries()) {
+    const inArr = Array.isArray(inputs) ? inputs : [inputs];
+    if (inArr.length > inputCount) inputCount = inArr.length;
+    rawRows.push({ inputs: inArr, output });
+  }
+
+  const columns = [];
+  for (let i = 0; i < inputCount; i += 1) {
+    columns.push("In " + (i + 1));
   }
   columns.push("Out");
 
-  for (const [inputs, output] of truthTable.entries()) {
-    rows.push(inputs.concat([output]).map(function (cell) {
-      return String(cell);
-    }));
-  }
+  const rows = rawRows.map(function (row) {
+    return row.inputs.map(cellStr).concat([cellStr(row.output)]);
+  });
 
   return {
     columns: columns,
@@ -1720,14 +1805,6 @@ function buildBatteryData() {
     return cells.length ? cells[cells.length - 1] : "";
   }
 
-  function rowInputs(row) {
-    if (Array.isArray(row.inputs)) {
-      return row.inputs;
-    }
-    const cells = Array.isArray(row.cells) ? row.cells : [];
-    return cells.slice(0, Math.max(0, cells.length - 1));
-  }
-
   const baseCells = rows.map(function (row) {
     return { symbol: String(rowOutput(row)), charged: false };
   });
@@ -1736,45 +1813,24 @@ function buildBatteryData() {
     return { connected: false, total: 0, charged: 0, cells: [] };
   }
 
-  const disconnected = { connected: false, total: rows.length, charged: 0, cells: baseCells };
-  const graph = buildPlayerGraph();
+  const selectedNode = state.selectedNodeId ? getNodeById(state.selectedNodeId) : null;
 
-  if (!graph) {
-    return disconnected;
+  if (!selectedNode || !state.placements.has(selectedNode.id)) {
+    return { connected: false, total: rows.length, charged: 0, cells: baseCells };
   }
 
-  const inputNeurones = graph.neurones.filter(function (neurone) {
-    return neurone.nodeType === "input";
-  });
-  const outputNeurones = graph.neurones.filter(function (neurone) {
-    return neurone.nodeType === "output";
-  });
-  const outputNeurone = outputNeurones[0];
+  const probeColumn = buildProbeColumn(selectedNode);
 
-  if (!outputNeurone || outputNeurone.inputs.length === 0) {
-    return disconnected;
+  if (!probeColumn.live) {
+    return { connected: false, total: rows.length, charged: 0, cells: baseCells };
   }
-
-  inputNeurones.sort(function (a, b) {
-    return String(a.name).localeCompare(String(b.name), undefined, { numeric: true });
-  });
 
   let charged = 0;
 
-  const cells = rows.map(function (row) {
-    const inputs = rowInputs(row);
-    const inputValues = {};
-
-    for (let index = 0; index < inputNeurones.length; index += 1) {
-      inputValues[inputNeurones[index].name] = model.normalizeCell(inputs[index]);
-    }
-
-    graph.setInputValues(inputValues);
-    const liveOutput = outputNeurone.value;
+  const cells = rows.map(function (row, index) {
     const targetOutput = String(model.normalizeCell(rowOutput(row)));
-    const isCharged = liveOutput !== null
-      && liveOutput !== undefined
-      && String(model.normalizeCell(liveOutput)) === targetOutput;
+    const liveValue = probeColumn.cells[index];
+    const isCharged = liveValue !== "" && liveValue === targetOutput;
 
     if (isCharged) {
       charged += 1;
@@ -1844,6 +1900,548 @@ function renderBattery() {
   dom.batteryShell.appendChild(battery);
 }
 
+// ---------- pan / zoom view ----------
+
+function clientToWorld(clientX, clientY) {
+  const rect = dom.boardViewport.getBoundingClientRect();
+  return {
+    x: (clientX - rect.left - state.view.x) / state.view.scale,
+    y: (clientY - rect.top - state.view.y) / state.view.scale,
+  };
+}
+
+function applyView() {
+  if (dom.worldLayer) {
+    dom.worldLayer.style.transform = "translate(" + state.view.x + "px, " + state.view.y + "px) scale(" + state.view.scale + ")";
+  }
+  updateProbeWires();
+}
+
+function fitView() {
+  const rect = dom.boardViewport.getBoundingClientRect();
+  if (!rect.width || !rect.height) {
+    return;
+  }
+  const scale = Math.min(rect.width / WORLD_W, rect.height / WORLD_H) * 0.96;
+  state.view.scale = scale;
+  state.view.x = (rect.width - WORLD_W * scale) / 2;
+  state.view.y = (rect.height - WORLD_H * scale) / 2;
+  applyView();
+}
+
+function zoomAround(px, py, factor) {
+  const oldScale = state.view.scale;
+  const newScale = clamp(oldScale * factor, 0.3, 2.8);
+  state.view.x = px - (px - state.view.x) * (newScale / oldScale);
+  state.view.y = py - (py - state.view.y) * (newScale / oldScale);
+  state.view.scale = newScale;
+  applyView();
+}
+
+function zoomByButton(factor) {
+  const rect = dom.boardViewport.getBoundingClientRect();
+  zoomAround(rect.width / 2, rect.height / 2, factor);
+}
+
+function onBoardWheel(event) {
+  if (state.gameState !== "playing") {
+    return;
+  }
+  event.preventDefault();
+  const rect = dom.boardViewport.getBoundingClientRect();
+  const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+  zoomAround(event.clientX - rect.left, event.clientY - rect.top, factor);
+}
+
+function onBoardPointerMove(event) {
+  if (!state.pan) {
+    return;
+  }
+  state.view.x = state.pan.ox + (event.clientX - state.pan.startX);
+  state.view.y = state.pan.oy + (event.clientY - state.pan.startY);
+  applyView();
+}
+
+function onBoardPointerUp() {
+  state.pan = null;
+  if (dom.boardViewport) {
+    dom.boardViewport.classList.remove("is-panning");
+  }
+  window.removeEventListener("pointermove", onBoardPointerMove);
+  window.removeEventListener("pointerup", onBoardPointerUp);
+}
+
+function onBoardPointerDown(event) {
+  if (state.gameState !== "playing") {
+    return;
+  }
+  if (event.target.closest && (event.target.closest(".node-token") || event.target.closest(".zoom-btn"))) {
+    return;
+  }
+  state.pan = {
+    startX: event.clientX,
+    startY: event.clientY,
+    ox: state.view.x,
+    oy: state.view.y,
+  };
+  dom.boardViewport.classList.add("is-panning");
+  window.addEventListener("pointermove", onBoardPointerMove);
+  window.addEventListener("pointerup", onBoardPointerUp);
+}
+
+// ---------- multimeter / probe ----------
+
+function buildPartialPlayerGraph() {
+  if (!state.graph) {
+    return null;
+  }
+
+  const graph = new model.Graph();
+  const neuroneBySlotId = new Map();
+  const neuroneByNodeId = new Map();
+
+  state.slots.forEach(function (slot) {
+    const currentNode = getNodeAtSlot(slot.id);
+    if (!currentNode) {
+      return;
+    }
+    const sourceNeurone = currentNode.neurone || null;
+    const neurone = new model.Neurone(
+      currentNode.nodeType || (sourceNeurone && sourceNeurone.nodeType) || "gate",
+      currentNode.id,
+      sourceNeurone && Array.isArray(sourceNeurone.states) ? sourceNeurone.states : [0, 1],
+    );
+    if (neurone.nodeType === "gate") {
+      const truthTable = currentNode.truthTable instanceof Map
+        ? currentNode.truthTable
+        : sourceNeurone && sourceNeurone.truthTable instanceof Map
+          ? sourceNeurone.truthTable
+          : new Map();
+      const inputStates = sourceNeurone && Array.isArray(sourceNeurone.inputStates)
+        ? sourceNeurone.inputStates
+        : null;
+      const dim = sourceNeurone && typeof sourceNeurone.getDims === "function"
+        ? sourceNeurone.getDims()
+        : truthTable.size > 0
+          ? truthTable.keys().next().value.length
+          : 0;
+      neurone.setGateFunction(dim, model.Neurone.createGateFunction(truthTable), inputStates, truthTable);
+    }
+    neuroneBySlotId.set(slot.id, neurone);
+    neuroneByNodeId.set(currentNode.id, neurone);
+    graph.addNeurone(neurone);
+  });
+
+  state.edges.forEach(function (edge) {
+    const fromSlot = state.slots.find(function (slot) {
+      return slot.nodeId === edge.from || slot.id === edge.from;
+    });
+    const toSlot = state.slots.find(function (slot) {
+      return slot.nodeId === edge.to || slot.id === edge.to;
+    });
+    if (!fromSlot || !toSlot) {
+      return;
+    }
+    const fromNeurone = neuroneBySlotId.get(fromSlot.id);
+    const toNeurone = neuroneBySlotId.get(toSlot.id);
+    if (fromNeurone && toNeurone) {
+      graph.connectNeurones(fromNeurone, toNeurone);
+    }
+  });
+
+  return { graph: graph, neuroneByNodeId: neuroneByNodeId };
+}
+
+function buildProbeColumn(node) {
+  const target = getRandomTruthTable();
+  const rows = target && Array.isArray(target.rows) ? target.rows : [];
+  const blank = { cells: rows.map(function () { return ""; }), live: false };
+
+  if (!node || !state.placements.has(node.id) || rows.length === 0) {
+    return blank;
+  }
+
+  const built = buildPartialPlayerGraph();
+  if (!built) {
+    return blank;
+  }
+
+  const probe = built.neuroneByNodeId.get(node.id);
+  if (!probe) {
+    return blank;
+  }
+
+  const inputNeurones = built.graph.neurones.filter(function (neurone) {
+    return neurone.nodeType === "input";
+  });
+  inputNeurones.sort(function (a, b) {
+    return String(a.name).localeCompare(String(b.name), undefined, { numeric: true });
+  });
+
+  function rowInputs(row) {
+    if (Array.isArray(row.inputs)) {
+      return row.inputs;
+    }
+    const cells = Array.isArray(row.cells) ? row.cells : [];
+    return cells.slice(0, Math.max(0, cells.length - 1));
+  }
+
+  let live = false;
+  const cells = rows.map(function (row) {
+    const inputs = rowInputs(row);
+    const inputValues = {};
+    for (let index = 0; index < inputNeurones.length; index += 1) {
+      inputValues[inputNeurones[index].name] = model.normalizeCell(inputs[index]);
+    }
+    built.graph.setInputValues(inputValues);
+    built.graph.propagateValues();
+    const value = probe.value;
+    if (value !== null && value !== undefined && value !== model.EMPTY_CELL) {
+      live = true;
+      return String(model.normalizeCell(value));
+    }
+    return "";
+  });
+
+  return { cells: cells, live: live };
+}
+
+function renderMultimeter(node) {
+  if (!dom.multimeterShell) {
+    return;
+  }
+
+  const slotted = Boolean(node && state.placements.has(node.id));
+  dom.multimeterShell.replaceChildren();
+  dom.multimeterShell.classList.toggle("is-idle", !slotted);
+
+  const meter = document.createElement("div");
+  meter.className = "multimeter";
+
+  const head = document.createElement("div");
+  head.className = "multimeter-head";
+  head.textContent = slotted ? getNodeLabel(node) : "Probe";
+  meter.appendChild(head);
+
+  const screen = document.createElement("div");
+  screen.className = "multimeter-screen";
+
+  if (slotted) {
+    const column = buildProbeColumn(node);
+    column.cells.forEach(function (symbol) {
+      const cell = document.createElement("div");
+      cell.className = "multimeter-cell" + (symbol === "" ? " is-blank" : (symbol.length > 1 ? " is-multi" : ""));
+      cell.textContent = symbol === "" ? "\u00b7" : symbol;
+      screen.appendChild(cell);
+    });
+  } else {
+    const note = document.createElement("div");
+    note.className = "multimeter-idle";
+    note.textContent = "Probe a slotted node to read its output column.";
+    screen.appendChild(note);
+  }
+
+  meter.appendChild(screen);
+
+  const leads = document.createElement("div");
+  leads.className = "multimeter-leads";
+  const leadPos = document.createElement("span");
+  leadPos.className = "lead lead-pos";
+  const leadNeg = document.createElement("span");
+  leadNeg.className = "lead lead-neg";
+  leads.appendChild(leadPos);
+  leads.appendChild(leadNeg);
+  meter.appendChild(leads);
+
+  dom.multimeterShell.appendChild(meter);
+}
+
+function appendWire(svg, start, end, color) {
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  const d = "M " + start.x + " " + start.y
+    + " C " + start.x + " " + (start.y + 52)
+    + " " + end.x + " " + (end.y + 52)
+    + " " + end.x + " " + end.y;
+  path.setAttribute("d", d);
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", color);
+  path.setAttribute("stroke-width", "3");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("opacity", "0.8");
+  svg.appendChild(path);
+}
+
+function updateProbeWires() {
+  const svg = dom.probeWires;
+  if (!svg) {
+    return;
+  }
+  svg.replaceChildren();
+
+  const node = state.selectedNodeId ? getNodeById(state.selectedNodeId) : null;
+  if (!node || !state.placements.has(node.id) || state.gameState !== "playing") {
+    return;
+  }
+  if (!dom.multimeterShell) {
+    return;
+  }
+
+  const slot = getSlotById(state.placements.get(node.id));
+  const leads = dom.multimeterShell.querySelectorAll(".lead");
+  if (!slot || leads.length < 2) {
+    return;
+  }
+
+  const boardRect = dom.boardViewport.getBoundingClientRect();
+  const bounds = slotBounds(slot);
+  const left = boardRect.left + state.view.x + bounds.left * state.view.scale;
+  const top = boardRect.top + state.view.y + bounds.top * state.view.scale;
+  const width = bounds.width * state.view.scale;
+  const height = bounds.height * state.view.scale;
+  const cx = left + width / 2;
+  const cy = top + height / 2;
+
+  if (cx < boardRect.left || cx > boardRect.right || cy < boardRect.top || cy > boardRect.bottom) {
+    return;
+  }
+
+  const posRect = leads[0].getBoundingClientRect();
+  const negRect = leads[1].getBoundingClientRect();
+  const startPos = { x: posRect.left + posRect.width / 2, y: posRect.bottom };
+  const startNeg = { x: negRect.left + negRect.width / 2, y: negRect.bottom };
+  const endRight = { x: left + width, y: cy };
+  const endLeft = { x: left, y: cy };
+
+  appendWire(svg, startNeg, endRight, "#8aa0b6");
+  appendWire(svg, startPos, endLeft, "#ff5d7a");
+}
+
+// ---------- combined meter rack ----------
+
+function alignMeterRows() {
+  if (!dom.batteryShell || !dom.multimeterShell) {
+    return;
+  }
+  dom.batteryShell.style.marginTop = "";
+  const firstSeg = dom.batteryShell.querySelector(".battery-segment");
+  const firstCell = dom.multimeterShell.querySelector(".multimeter-cell");
+  if (!firstSeg || !firstCell) {
+    return;
+  }
+  const diff = firstCell.getBoundingClientRect().top
+    - firstSeg.getBoundingClientRect().top;
+  if (diff > 0) {
+    dom.batteryShell.style.marginTop = Math.round(diff) + "px";
+  }
+}
+
+function renderMeterRack(selectedNode) {
+  if (!dom.meterRack) {
+    return;
+  }
+
+  const batteryData = buildBatteryData();
+
+  if (dom.batteryReadout) {
+    dom.batteryReadout.textContent =
+      batteryData.charged + " / " + batteryData.total;
+  }
+  if (dom.batteryMeta) {
+    if (batteryData.total === 0) {
+      dom.batteryMeta.textContent = "Probe a node to see how it matches.";
+    } else if (!batteryData.connected) {
+      dom.batteryMeta.textContent =
+        "Probe a placed node to read its output column.";
+    } else if (batteryData.charged === batteryData.total) {
+      dom.batteryMeta.textContent =
+        "Fully charged — every target row matches.";
+    } else {
+      dom.batteryMeta.textContent = "Charging — "
+        + batteryData.charged + " of "
+        + batteryData.total + " target rows match.";
+    }
+  }
+
+  if (batteryData.total === 0) {
+    dom.meterRack.replaceChildren();
+    return;
+  }
+
+  const slotted = Boolean(
+    selectedNode && state.placements.has(selectedNode.id)
+  );
+  const probeColumn = slotted ? buildProbeColumn(selectedNode) : null;
+
+  const table = document.createElement("div");
+  table.className = "meter-table";
+
+  const battHead = document.createElement("div");
+  battHead.className = "meter-col-head";
+  battHead.textContent = "Target";
+  table.appendChild(battHead);
+
+  const probeHead = document.createElement("div");
+  probeHead.className = "meter-col-head meter-col-head--probe";
+  probeHead.textContent = selectedNode ? getNodeLabel(selectedNode) : "Probe";
+  table.appendChild(probeHead);
+
+  batteryData.cells.forEach(function (cell, index) {
+    const seg = document.createElement("div");
+    seg.className = "battery-segment"
+      + (cell.charged ? " is-charged" : "");
+    const sym = document.createElement("span");
+    sym.className = "battery-symbol";
+    sym.textContent = cell.symbol;
+    seg.appendChild(sym);
+    table.appendChild(seg);
+
+    const liveVal = probeColumn ? probeColumn.cells[index] : "";
+    const mCell = document.createElement("div");
+    mCell.className = "multimeter-cell"
+      + (!liveVal ? " is-blank" : liveVal.length > 1 ? " is-multi" : "");
+    mCell.textContent = liveVal || "·";
+    table.appendChild(mCell);
+  });
+
+  dom.meterRack.replaceChildren(table);
+}
+
+// ---------- keyboard play ----------
+
+function availableNodeIds() {
+  return state.stripOrder.filter(function (id) {
+    return !state.placements.has(id);
+  });
+}
+
+function applyKbHighlight() {
+  if (!dom.stripLayer || !dom.slotLayer) {
+    return;
+  }
+  const stripTokens = Array.prototype.slice.call(dom.stripLayer.children);
+  stripTokens.forEach(function (element, index) {
+    element.classList.toggle("kb-pick", state.kb.active && index === state.kb.nodeIndex);
+  });
+  const slotElements = Array.prototype.slice.call(dom.slotLayer.children);
+  slotElements.forEach(function (element, index) {
+    element.classList.toggle("kb-target", state.kb.active && index === state.kb.slotIndex);
+  });
+}
+
+function hideKeyboardSelection() {
+  if (!state.kb.active) {
+    return;
+  }
+  state.kb.active = false;
+  applyKbHighlight();
+}
+
+function clampKbIndices() {
+  const available = availableNodeIds();
+  if (available.length === 0) {
+    state.kb.nodeIndex = 0;
+  } else {
+    state.kb.nodeIndex = ((state.kb.nodeIndex % available.length) + available.length) % available.length;
+  }
+  const slotCount = state.slots.length;
+  if (slotCount === 0) {
+    state.kb.slotIndex = 0;
+  } else {
+    state.kb.slotIndex = ((state.kb.slotIndex % slotCount) + slotCount) % slotCount;
+  }
+}
+
+function placeNodeIntoSlot(nodeId, slotId) {
+  const node = getNodeById(nodeId);
+  const slot = getSlotById(slotId);
+  if (!node || !slot || isFixedNode(node)) {
+    return;
+  }
+  const occupant = getNodeAtSlot(slotId);
+  const sourceSlotId = state.placements.get(nodeId) || null;
+  if (occupant && occupant.id !== nodeId) {
+    if (sourceSlotId) {
+      state.placements.set(occupant.id, sourceSlotId);
+    } else {
+      state.placements.delete(occupant.id);
+    }
+  }
+  state.placements.set(nodeId, slotId);
+  state.pendingCompletion = false;
+  renderBoard();
+  updateSummary();
+}
+
+function onKeyDown(event) {
+  if (state.gameState !== "playing") {
+    return;
+  }
+
+  const key = event.key;
+  const isArrow = key === "ArrowLeft" || key === "ArrowRight" || key === "ArrowUp" || key === "ArrowDown";
+
+  if (isArrow) {
+    event.preventDefault();
+    if (!state.kb.active) {
+      state.kb.active = true;
+    } else if (key === "ArrowLeft") {
+      state.kb.nodeIndex -= 1;
+    } else if (key === "ArrowRight") {
+      state.kb.nodeIndex += 1;
+    } else if (key === "ArrowUp") {
+      state.kb.slotIndex -= 1;
+    } else if (key === "ArrowDown") {
+      state.kb.slotIndex += 1;
+    }
+    clampKbIndices();
+    applyKbHighlight();
+    return;
+  }
+
+  if (!state.kb.active) {
+    return;
+  }
+
+  if (key === "Enter") {
+    event.preventDefault();
+    clampKbIndices();
+    const available = availableNodeIds();
+    const nodeId = available[state.kb.nodeIndex];
+    const slot = state.slots[state.kb.slotIndex];
+    if (nodeId && slot) {
+      placeNodeIntoSlot(nodeId, slot.id);
+      clampKbIndices();
+      applyKbHighlight();
+    }
+    return;
+  }
+
+  if (key === " " || key === "Spacebar") {
+    event.preventDefault();
+    clampKbIndices();
+    const slot = state.slots[state.kb.slotIndex];
+    const occupant = slot ? getNodeAtSlot(slot.id) : null;
+    if (occupant) {
+      showTruthTableForNode(occupant.id);
+    } else {
+      const available = availableNodeIds();
+      const nodeId = available[state.kb.nodeIndex];
+      if (nodeId) {
+        showTruthTableForNode(nodeId);
+      }
+    }
+  }
+}
+
+function updateHintDisplay() {
+  if (dom.checkButton) {
+    dom.checkButton.textContent = state.hintCount > 0 ? "Hint (" + state.hintCount + ")" : "Hint";
+  }
+  if (dom.finalHints) {
+    dom.finalHints.textContent = String(state.hintCount);
+  }
+}
+
 function hideTruthTableModal() {
   if (!dom.truthTableModal) {
     return;
@@ -1875,7 +2473,7 @@ function refreshTruthTableModal() {
   dom.truthTableModalTable.replaceChildren();
 
   if (selectedNode && selectedTable) {
-    dom.truthTableModalTitle.textContent = selectedNode.label;
+    dom.truthTableModalTitle.textContent = getNodeLabel(selectedNode);
     dom.truthTableModalMeta.textContent = (selectedNode.nodeType || "node") + " node · " + selectedTable.meta;
     if (dom.truthTableModalEmpty) {
       dom.truthTableModalEmpty.hidden = true;
@@ -1891,12 +2489,25 @@ function refreshTruthTableModal() {
   }
 
   renderBattery();
+  renderMultimeter(selectedNode);
+  alignMeterRows();
+  updateProbeWires();
 }
 
 function checkLayout() {
   state.checking = true;
+  state.hintCount += 1;
+  updateHintDisplay();
   updateSummary();
   renderBoard();
+}
+
+function updateDifficultyUI() {
+  const val = state.targetInputCount !== null
+    ? String(state.targetInputCount)
+    : "";
+  if (dom.menuDiffInput) dom.menuDiffInput.value = val;
+  if (dom.completeDiffInput) dom.completeDiffInput.value = val;
 }
 
 function initializeControls() {
@@ -1912,11 +2523,24 @@ function initializeControls() {
     });
   }
 
-  dom.shuffleButton.addEventListener("click", function () {
-    resetPlacements(true);
-    setStatus("Shuffled", "neutral");
-    renderBoard();
-  });
+  function onDiffInputChange(input) {
+    const raw = input.value.trim();
+    const n = parseInt(raw, 10);
+    const invalid = raw === "" || n < 1 || !Number.isInteger(n);
+    state.targetInputCount = invalid ? null : n;
+    updateDifficultyUI();
+  }
+  if (dom.menuDiffInput) {
+    dom.menuDiffInput.addEventListener("change", function () {
+      onDiffInputChange(dom.menuDiffInput);
+    });
+  }
+  if (dom.completeDiffInput) {
+    dom.completeDiffInput.addEventListener("change", function () {
+      onDiffInputChange(dom.completeDiffInput);
+    });
+  }
+  updateDifficultyUI();
 
   dom.resetButton.addEventListener("click", function () {
     resetPlacements(false);
@@ -1925,10 +2549,41 @@ function initializeControls() {
   });
 
   dom.checkButton.addEventListener("click", checkLayout);
+  if (dom.cheatButton) {
+    dom.cheatButton.addEventListener("click", function () {
+      state.cheatRevealed = !state.cheatRevealed;
+      dom.cheatButton.textContent = state.cheatRevealed ? "Hide" : "Cheat";
+      renderBoard();
+      if (state.selectedNodeId) refreshTruthTableModal();
+    });
+  }
   if (dom.truthTableModalClose && dom.truthTableModal) {
     dom.truthTableModalClose.addEventListener("click", hideTruthTableModal);
   }
-  window.addEventListener("resize", scheduleRender);
+
+  if (dom.boardViewport) {
+    dom.boardViewport.addEventListener("pointerdown", onBoardPointerDown);
+    dom.boardViewport.addEventListener("wheel", onBoardWheel, { passive: false });
+  }
+  if (dom.zoomInBtn) {
+    dom.zoomInBtn.addEventListener("click", function () { zoomByButton(1.18); });
+  }
+  if (dom.zoomOutBtn) {
+    dom.zoomOutBtn.addEventListener("click", function () { zoomByButton(1 / 1.18); });
+  }
+  if (dom.zoomResetBtn) {
+    dom.zoomResetBtn.addEventListener("click", fitView);
+  }
+
+  document.addEventListener("keydown", onKeyDown);
+  document.addEventListener("pointerdown", function () {
+    hideKeyboardSelection();
+  }, true);
+  window.addEventListener("scroll", updateProbeWires, true);
+  window.addEventListener("resize", function () {
+    scheduleRender();
+    applyView();
+  });
 }
 
 export async function createGameUI() {

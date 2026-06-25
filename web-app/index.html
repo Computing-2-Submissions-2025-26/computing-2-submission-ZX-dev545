@@ -4,9 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Random Graphwrapper Game UI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="default.css">
     <script type="module" src="random-main.js"></script>
-    <script src="battery-widget.js"></script>
 </head>
 <body>
 <div id="app" data-state="menu">
@@ -16,7 +18,11 @@
             <h1 id="menuTitle">Node Route Shuffle</h1>
             <p id="menuDescription" class="lede">This page generates a random truth table, converts it into a graphwrapper, and hands that graph to the game UI immediately.</p>
             <p id="menuTime" class="menu-time" hidden></p>
-            <p id="menuNote" class="menu-note">Use the View button inside each node to inspect its truth table.</p>
+            <p id="menuNote" class="menu-note">Drag or use the keyboard to slot every node. Press Probe on a node to read its truth table.</p>
+            <div class="diff-control">
+                <label class="diff-label" for="menuDiffInput">Gate slots (blank&#xA0;= random)</label>
+                <input id="menuDiffInput" class="diff-input" type="number" min="1" placeholder="random" autocomplete="off">
+            </div>
             <button id="menuPlayButton" class="primary-button" type="button">Play</button>
         </div>
     </section>
@@ -25,7 +31,11 @@
         <div class="menu-card">
             <p class="eyebrow">Completed</p>
             <h1>Board solved</h1>
-            <p class="lede">You finished in <strong id="finalTime">0:00</strong>.</p>
+            <p class="lede">You finished in <strong id="finalTime">0:00</strong> &middot; <strong id="finalHints">0</strong> hints used.</p>
+            <div class="diff-control">
+                <label class="diff-label" for="completeDiffInput">Gate slots (blank&#xA0;= random)</label>
+                <input id="completeDiffInput" class="diff-input" type="number" min="1" placeholder="random" autocomplete="off">
+            </div>
             <button id="playAgainButton" class="primary-button" type="button">Play again</button>
         </div>
     </section>
@@ -47,16 +57,24 @@
                 </div>
                 <div class="board-actions">
                     <span id="timerText" class="timer-pill">00:00</span>
-                    <button id="shuffleButton" class="secondary-button" type="button">Shuffle</button>
                     <button id="resetButton" class="secondary-button" type="button">Reset</button>
-                    <button id="checkButton" class="primary-button" type="button">Check layout</button>
+                    <button id="cheatButton" class="secondary-button" type="button">Cheat</button>
+                    <button id="checkButton" class="primary-button" type="button">Hint</button>
                 </div>
             </div>
 
             <div id="boardViewport" class="board-viewport" aria-label="Graph board">
-                <svg id="edgeLayer" class="edge-layer" aria-hidden="true"></svg>
-                <div id="slotLayer" class="slot-layer" aria-hidden="true"></div>
-                <div id="tokenLayer" class="token-layer token-layer--board" aria-hidden="true"></div>
+                <div id="worldLayer" class="world-layer">
+                    <svg id="edgeLayer" class="edge-layer" aria-hidden="true"></svg>
+                    <div id="slotLayer" class="slot-layer" aria-hidden="true"></div>
+                    <div id="tokenLayer" class="token-layer token-layer--board" aria-hidden="true"></div>
+                </div>
+                <div class="board-zoom" role="group" aria-label="Zoom controls">
+                    <button id="zoomInBtn" class="zoom-btn" type="button" aria-label="Zoom in">+</button>
+                    <button id="zoomResetBtn" class="zoom-btn" type="button" aria-label="Fit board">&#9974;</button>
+                    <button id="zoomOutBtn" class="zoom-btn" type="button" aria-label="Zoom out">&minus;</button>
+                </div>
+                <p class="board-pan-hint">Scroll to zoom &middot; drag to pan &middot; arrow keys to select</p>
             </div>
 
             <div class="strip-shell">
@@ -72,27 +90,39 @@
         </section>
 
         <aside id="truthPanel" class="panel truth-panel">
-            <div class="truth-panel-heading">
-                <div>
-                    <p class="section-label">Truth table</p>
-                    <h2 id="truthPanelTitle">Select a node</h2>
+            <section class="tt-section node-tt">
+                <div class="truth-panel-heading">
+                    <div>
+                        <p class="section-label">Node inspector</p>
+                        <h2 id="truthPanelTitle">Select a node</h2>
+                    </div>
+                    <button id="truthPanelClose" class="secondary-button" type="button">Clear</button>
                 </div>
-                <button id="truthPanelClose" class="secondary-button" type="button">Clear</button>
-            </div>
-            <p id="truthPanelMeta" class="truth-panel-meta">Use the View button inside a node to inspect its truth table here.</p>
-            <div class="truth-panel-body">
-                <div id="truthPanelBody"></div>
-                <p id="truthPanelEmpty" class="truth-panel-empty">No node selected.</p>
-            </div>
-            <div class="truth-progress-panel">
-                <div class="truth-progress-div">
-                    <p class="truth-progress-label">Progress</p>
-                    <div id="batteryWidget"></div>
+                <p id="truthPanelMeta" class="truth-panel-meta">Use the Probe button inside a node to inspect its truth table here.</p>
+                <div class="truth-panel-body">
+                    <div id="truthPanelBody"></div>
+                    <p id="truthPanelEmpty" class="truth-panel-empty">No node selected.</p>
                 </div>
-                <p id="truthProgressText" class="truth-progress-text">0 / 0 placed</p>
-            </div>
+            </section>
+
+            <section class="tt-section battery-section">
+                <div class="truth-panel-heading">
+                    <div>
+                        <p class="section-label">Live circuit</p>
+                        <h2 id="batteryTitle">Output charge</h2>
+                    </div>
+                    <span id="batteryReadout" class="battery-readout">0 / 0</span>
+                </div>
+                <p id="batteryMeta" class="truth-panel-meta">Each cell is a target row. It lights when your circuit's output matches.</p>
+                <div class="meter-rack">
+                    <div id="multimeterShell" class="multimeter-shell is-idle" aria-hidden="true"></div>
+                    <div id="batteryShell" class="battery-shell" aria-hidden="true"></div>
+                </div>
+            </section>
         </aside>
     </main>
+
+    <svg id="probeWires" class="probe-wires" aria-hidden="true"></svg>
 </div>
 </body>
 </html>

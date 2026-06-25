@@ -8,7 +8,9 @@ function arraysEqual(a, b) {
     if (!a || !b) return false;
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i += 1) {
-        if (a[i] !== b[i]) return false;
+        if (Array.isArray(a[i]) && Array.isArray(b[i])) {
+            if (!arraysEqual(a[i], b[i])) return false;
+        } else if (a[i] !== b[i]) return false;
     }
     return true;
 }
@@ -818,9 +820,9 @@ class Graph {
                     pairTruthTable
                 );
                 gate.addInput(leftNode);
-                if (rightNode !== leftNode) {
+                //if (rightNode !== leftNode) {
                     gate.addInput(rightNode);
-                }
+                //}
                 this.addNeurone(gate);
                 nextLayer.push(gate);
                 pairMetadata.push({ gate: gate, leftIndex: pairIndex, rightIndex: pairIndex + 1 });
