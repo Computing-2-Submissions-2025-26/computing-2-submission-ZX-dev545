@@ -1,4 +1,5 @@
 import model from "./model.js";
+import R from "./ramda.js";
 
 const CHIP_PALETTE = [
   "#9fd9ff",
@@ -300,9 +301,7 @@ function getNodeName(node, index) {
 
 function generatePseudonyms() {
   state.cheatRevealed = false;
-  const gateNodes = state.nodes.filter(function (node) {
-    return !isFixedNode(node);
-  });
+  const gateNodes = R.reject(isFixedNode, state.nodes);
   const letters = gateNodes.map(function (_, i) {
     return String.fromCharCode(65 + i);
   });
@@ -395,16 +394,10 @@ function getRandomTruthTableColumnForNode(node) {
 }
 
 function buildNodeTypeBuckets(nodes) {
-  return nodes.reduce(function (buckets, node) {
-    const type = node.nodeType || node.kind || "gate";
-
-    if (!buckets[type]) {
-      buckets[type] = [];
-    }
-
-    buckets[type].push(node);
-    return buckets;
-  }, { input: [], gate: [], output: [] });
+  const grouped = R.groupBy(
+    node => node.nodeType || node.kind || "gate", nodes
+  );
+  return Object.assign({ input: [], gate: [], output: [] }, grouped);
 }
 
 function normalizeGraph(source) {
@@ -2309,9 +2302,7 @@ function renderMeterRack(selectedNode) {
 // ---------- keyboard play ----------
 
 function availableNodeIds() {
-  return state.stripOrder.filter(function (id) {
-    return !state.placements.has(id);
-  });
+  return R.reject(id => state.placements.has(id), state.stripOrder);
 }
 
 function applyKbHighlight() {
