@@ -1,5 +1,4 @@
 import model from "./model.js";
-import R from "./ramda.js";
 
 const CHIP_PALETTE = [
   "#9fd9ff",

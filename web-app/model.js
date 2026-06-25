@@ -55,7 +55,7 @@ function getMatchingKeys(map, patternArray) {
 
 <<<<<<< HEAD
 function mapToObject(m) {
-    return R.fromPairs(
+    return fromPairs(
         [...m.entries()].map(([key, value]) => [JSON.stringify(key), value])
     );
 =======
@@ -697,13 +697,15 @@ class Graph {
     }
 
     cartesianProduct(arrays) {
-        return R.reduce(
-            (acc, arr) => R.chain(
-                combo => arr.map(item => [...combo, item]), acc
-            ),
-            [[]],
-            arrays
-        );
+        if (arrays.length === 0) return [[]];
+        const result = [];
+        const rest = this.cartesianProduct(arrays.slice(1));
+        for (const item of arrays[0]) {
+            for (const r of rest) {
+                result.push([item, ...r]);
+            }
+        }
+        return result;
     }
 
     getTruthTableEntries() {
@@ -719,7 +721,9 @@ class Graph {
     }
 
     static obediance(column, targetColumn) {
-        const predicate = R.zipWith((a, b) => a === b, column, targetColumn);
+        const predicate = column.map(function (value, index) {
+            return value === targetColumn[index];
+        });
         const score = predicate.length > 0
             ? predicate.filter(Boolean).length / predicate.length
             : 0;
@@ -743,11 +747,24 @@ class Graph {
         };
 
         const flattenStates = function (values) {
-            const items = R.chain(
-                v => (Array.isArray(v) ? v : [v]), [...values]
-            );
-            const flat = R.uniq(items);
-            return flat.length > 0 ? flat : [N];
+            const seen = new Set();
+            const states = [];
+
+            for (const value of values) {
+                if (Array.isArray(value)) {
+                    for (const item of value) {
+                        if (!seen.has(item)) {
+                            seen.add(item);
+                            states.push(item);
+                        }
+                    }
+                } else if (!seen.has(value)) {
+                    seen.add(value);
+                    states.push(value);
+                }
+            }
+
+            return states.length > 0 ? states : [N];
         };
 
         const currentLayers = Array.isArray(neuroneLayers) ? neuroneLayers.slice() : [];
